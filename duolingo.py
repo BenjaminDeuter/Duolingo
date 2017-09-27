@@ -28,7 +28,9 @@ class Duolingo(object):
         if password:
             self._login()
 
-        self.user_data = Struct(**self._get_data())
+        self.user_data = None
+        self.ui_lang = None
+        self.learning_lang = None
 
     def _make_req(self, url, data=None):
         if data:
@@ -149,22 +151,28 @@ class Duolingo(object):
                 # unknown exception, raise it again
                 raise Exception(e.args)
 
-    def _switch_language(self, lang):
+    def switch_language(self, ui_lang, learning_lang):
         """
         Change the learned language with
         ``https://www.duolingo.com/switch_language``.
 
-        :param lang: Wanted language abbreviation (example: ``'fr'``)
-        :type lang: str
+        :param learning_lang: Wanted language abbreviation (example: ``'fr'``)
+        :type learning_lang: str
         """
-        data = {"learning_language": lang}
-        url = "https://www.duolingo.com/switch_language"
+
+        data = {
+            "from_language": ui_lang,
+            "learning_language": learning_lang,
+        }
+        url = 'https://www.duolingo.com/api/1/me/switch_language'
         request = self._make_req(url, data)
 
         try:
             parse = request.json()['tracking_properties']
-            if parse['learning_language'] == lang:
+            if parse['ui_language'] == ui_lang and parse['learning_language'] == learning_lang:
                 self.user_data = Struct(**self._get_data())
+                self.ui_lang       = ui_lang
+                self.learning_lang = learning_lang
         except:
             raise Exception('Failed to switch language')
 
@@ -296,23 +304,23 @@ class Duolingo(object):
         fields = ['daily_goal', 'site_streak', 'streak_extended_today']
         return self._make_dict(fields, self.user_data)
 
-    def _is_current_language(self, abbr):
+    def _is_current_language(self, ui_lang, learning_lang):
         """Get if user is learning a language."""
-        return abbr in self.user_data.language_data.keys()
+        return self.ui_lang == ui_lang and self.learning_lang == learning_lang
 
-    def get_calendar(self, language_abbr=None):
+    def get_calendar(self, ui_lang=None, learning_lang=None):
         """Get user's last actions."""
-        if language_abbr:
-            if not self._is_current_language(language_abbr):
-                self._switch_language(language_abbr)
-            return self.user_data.language_data[language_abbr]['calendar']
+        if ui_lang and learning_lang:
+            if not _is_current_language(ui_lang, learning_lang):
+                self.switch_language(ui_lang, learning_lang)
+            return self.user_data.language_data[learning_lang]['calendar']
         else:
             return self.user_data.calendar
 
-    def get_language_progress(self, lang):
+    def get_language_progress(self, ui_lang, learning_lang):
         """Get informations about user's progression in a language."""
-        if not self._is_current_language(lang):
-            self._switch_language(lang)
+        if not self._is_current_language(ui_lang, learning_lang):
+            self.switch_language(ui_lang, learning_lang)
 
         fields = ['streak', 'language_string', 'level_progress',
                   'num_skills_learned', 'level_percent', 'level_points',
@@ -409,12 +417,12 @@ class Duolingo(object):
         except:
             raise Exception('Could not get translations')
 
-    def get_vocabulary(self, language_abbr=None):
+    def get_vocabulary(self, learning_lang=None):
         """Get overview of user's vocabulary in a language."""
         if not self.password:
             raise Exception("You must provide a password for this function")
-        if language_abbr and not self._is_current_language(language_abbr):
-            self._switch_language(language_abbr)
+        if learning_lang and not self._is_current_language(ui_lang, learning_lang):
+            self.switch_language(ui_lang, learning_lang)
 
         overview_url = "https://www.duolingo.com/vocabulary/overview"
         overview_request = self._make_req(overview_url)
@@ -483,11 +491,11 @@ class Duolingo(object):
         return "{}/tts/{}/token/{}".format(self._cloudfront_server, tts_voice,
                                            word)
 
-    def get_related_words(self, word, language_abbr=None):
+    def get_related_words(self, word, learning_lang=None):
         if not self.password:
             raise Exception("You must provide a password for this function")
-        if language_abbr and not self._is_current_language(language_abbr):
-            self._switch_language(language_abbr)
+        if learning_lang and not self._is_current_language(ui_lang, learning_lang):
+            self.switch_language(ui_lang, learning_lang)
 
         overview_url = "https://www.duolingo.com/vocabulary/overview"
         overview_request = self._make_req(overview_url)
